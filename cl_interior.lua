@@ -1,0 +1,884 @@
+Citizen.CreateThread(function() -- so we can wait for until the config is loaded
+while not xnGarageConfig do Citizen.Wait(0) end
+print([[
+
+xnOnlineGarage has been loaded
+This resource is in beta, do not use in production...
+]])
+
+xnGarage_default = {
+    vehicleTaken = false,
+    vehicleTakenPos = false,
+    curGarage = false, --xnGarageConfig.locations["delperro-apt"],
+    curGarageName = false,
+    vehicles = {},
+} xnGarage = xnGarage or xnGarage_default
+
+local vehicleTable
+-- Helper Functions
+
+function GetVehicle(ply,doesNotNeedToBeDriver)
+	local found = false
+	local ped = GetPlayerPed((ply and ply or -1))
+	local veh = 0
+	if IsPedInAnyVehicle(ped) then
+		 veh = GetVehiclePedIsIn(ped, false)
+	end
+	if veh ~= 0 then
+		if GetPedInVehicleSeat(veh, -1) == ped or doesNotNeedToBeDriver then
+			found = true
+		end
+	end
+	return found, veh, (veh ~= 0 and GetEntityModel(veh) or 0)
+end
+
+local function PlayCustomSound(sound)
+    SendNUIMessage({
+        soundName = sound,
+	})
+end
+
+local lock_fancyteleport = false
+local function FancyTeleport(ent,x,y,z,h,fOut,hold,fIn,resetCam)
+    if not lock_fancyteleport then
+        lock_fancyteleport = true
+        Citizen.CreateThread(function() Citizen.Wait(15000) DoScreenFadeIn(500) end)
+        Citizen.CreateThread(function()
+            FreezeEntityPosition(ent, true)
+
+            DoScreenFadeOut(fOut or 500)
+            while IsScreenFadingOut() do Citizen.Wait(0) end
+
+            SetEntityCoords(ent, x, y, z)
+            if h then SetEntityHeading(ent, h) SetGameplayCamRelativeHeading(0) end
+            if GetVehicle() then SetVehicleOnGroundProperly(ent) end
+            FreezeEntityPosition(ent, false)
+
+            Citizen.Wait(hold or 5000)
+
+            DoScreenFadeIn(fIn or 500)
+            while IsScreenFadingIn() do Citizen.Wait(0) end
+
+            lock_fancyteleport = false
+        end)
+    end
+end
+
+local function ToCoord(t,withHeading)
+    if withHeading == true then
+        local h = (t[4]+0.0) or 0.0
+        return (t[1]+0.0),(t[2]+0.0),(t[3]+0.0),h
+    elseif withHeading == "only" then
+        local h = (t[4]+0.0) or 0.0
+        return h
+    else
+        return (t[1]+0.0),(t[2]+0.0),(t[3]+0.0)
+    end
+end
+
+-- These vehicle functions are not /fully/ mine.
+-- I forgot where I took the originals from but I *did* modify them for my own use.
+-- Credit to whoever actually made the original functions.
+local function DoesVehicleHaveExtras( veh )
+    for i = 1, 30 do
+        if ( DoesExtraExist( veh, i ) ) then
+            return true
+        end
+    end
+
+    return false
+end
+
+local function VehicleToData(veh)
+	local vehicleTableData = {}
+
+	local model = GetEntityModel( veh )
+	local primaryColour, secondaryColour = GetVehicleColours( veh )
+	local pearlColour, wheelColour = GetVehicleExtraColours( veh )
+	local mod1a, mod1b, mod1c = GetVehicleModColor_1( veh )
+	local mod2a, mod2b = GetVehicleModColor_2( veh )
+	local custR1, custG2, custB3, custR2, custG2, custB2
+
+	if ( GetIsVehiclePrimaryColourCustom( veh ) ) then
+		custR1, custG1, custB1 = GetVehicleCustomPrimaryColour( veh )
+	end
+
+	if ( GetIsVehicleSecondaryColourCustom( veh ) ) then
+		custR2, custG2, custB2 = GetVehicleCustomSecondaryColour( veh )
+	end
+
+	vehicleTableData[ "model" ] = tostring( model )
+	vehicleTableData[ "primaryColour" ] = primaryColour
+	vehicleTableData[ "secondaryColour" ] = secondaryColour
+	vehicleTableData[ "pearlColour" ] = pearlColour
+	vehicleTableData[ "wheelColour" ] = wheelColour
+	vehicleTableData[ "mod1Colour" ] = { mod1a, mod1b, mod1c }
+	vehicleTableData[ "mod2Colour" ] = { mod2a, mod2b }
+	vehicleTableData[ "custPrimaryColour" ] =  { custR1, custG1, custB1 }
+	vehicleTableData[ "custSecondaryColour" ] = { custR2, custG2, custB2 }
+
+	local livery = GetVehicleLivery( veh )
+	local plateText = GetVehicleNumberPlateText( veh )
+	local plateType = GetVehicleNumberPlateTextIndex( veh )
+	local wheelType = GetVehicleWheelType( veh )
+	local windowTint = GetVehicleWindowTint( veh )
+	local burstableTyres = GetVehicleTyresCanBurst( veh )
+	local customTyres = GetVehicleModVariation( veh, 23 )
+
+	vehicleTableData[ "livery" ] = livery
+	vehicleTableData[ "plateText" ] = plateText
+	vehicleTableData[ "plateType" ] = plateType
+	vehicleTableData[ "wheelType" ] = wheelType
+	vehicleTableData[ "windowTint" ] = windowTint
+	vehicleTableData[ "burstableTyres" ] = burstableTyres
+	vehicleTableData[ "customTyres" ] = customTyres
+
+	local neonR, neonG, neonB = GetVehicleNeonLightsColour( veh )
+	local smokeR, smokeG, smokeB = GetVehicleTyreSmokeColor( veh )
+
+	local neonToggles = {}
+
+	for i = 0, 3 do
+		if ( IsVehicleNeonLightEnabled( veh, i ) ) then
+			table.insert( neonToggles, i )
+		end
+	end
+
+	vehicleTableData[ "neonColour" ] = { neonR, neonG, neonB }
+	vehicleTableData[ "smokeColour" ] = { smokeR, smokeG, smokeB }
+	vehicleTableData[ "neonToggles" ] = neonToggles
+
+	local extras = {}
+
+
+	if ( DoesVehicleHaveExtras( veh ) ) then
+		for i = 1, 30 do
+			if ( DoesExtraExist( veh, i ) ) then
+				if ( IsVehicleExtraTurnedOn( veh, i ) ) then
+					table.insert( extras, i )
+				end
+			end
+		end
+	end
+
+	vehicleTableData[ "extras" ] = extras
+
+	local mods = {}
+
+	for i = 0, 49 do
+		local isToggle = ( i >= 17 ) and ( i <= 22 )
+
+		if ( isToggle ) then
+			mods[i] = IsToggleModOn( veh, i )
+		else
+			mods[i] = GetVehicleMod( veh, i )
+		end
+	end
+
+	vehicleTableData[ "mods" ] = mods
+
+	local ret = vehicleTableData
+
+	return ret
+end
+
+local function CreateVehicleFromData(data, x,y,z,h, dontnetwork)
+
+	local model = data[ "model" ]
+	local primaryColour = data[ "primaryColour" ]
+	local secondaryColour = data[ "secondaryColour" ]
+	local pearlColour = data[ "pearlColour" ]
+	local wheelColour = data[ "wheelColour" ]
+	local mod1Colour = data[ "mod1Colour" ]
+	local mod2Colour = data[ "mod2Colour" ]
+	local custPrimaryColour = data[ "custPrimaryColour" ]
+	local custSecondaryColour = data[ "custSecondaryColour" ]
+	local livery = data[ "livery" ]
+	local plateText = data[ "plateText" ]
+	local plateType = data[ "plateType" ]
+	local wheelType = data[ "wheelType" ]
+	local windowTint = data[ "windowTint" ]
+	local burstableTyres = data[ "burstableTyres" ]
+	local customTyres = data[ "customTyres" ]
+	local neonColour = data[ "neonColour" ]
+	local smokeColour = data[ "smokeColour" ]
+	local neonToggles = data[ "neonToggles" ]
+	local extras = data[ "extras" ]
+	local mods = data[ "mods" ]
+
+	local veh = CreateVehicle(tonumber(model), x,y,z,h,not dontnetwork)
+
+	-- Set the mod kit to 0, this is so we can do shit to the car
+	SetVehicleModKit( veh, 0 )
+
+	SetVehicleTyresCanBurst( veh, burstableTyres )
+	SetVehicleNumberPlateTextIndex( veh,  plateType )
+	SetVehicleNumberPlateText( veh, plateText )
+	SetVehicleWindowTint( veh, windowTint )
+	SetVehicleWheelType( veh, wheelType )
+
+	for i = 1, 30 do
+		if ( DoesExtraExist( veh, i ) ) then
+			SetVehicleExtra( veh, i, true )
+		end
+	end
+
+	for k, v in pairs( extras ) do
+		local extra = tonumber( v )
+		SetVehicleExtra( veh, extra, false )
+	end
+
+	for k, v in pairs( mods ) do
+		local k = tonumber( k )
+		local isToggle = ( k >= 17 ) and ( k <= 22 )
+
+		if ( isToggle ) then
+			ToggleVehicleMod( veh, k, v )
+		else
+			SetVehicleMod( veh, k, v, 0 )
+		end
+	end
+
+	local currentMod = GetVehicleMod( veh, 23 )
+	SetVehicleMod( veh, 23, currentMod, customTyres )
+	SetVehicleMod( veh, 24, currentMod, customTyres )
+
+	if ( livery ~= -1 ) then
+		SetVehicleLivery( veh, livery )
+	end
+
+	SetVehicleExtraColours( veh, pearlColour, wheelColour )
+	SetVehicleModColor_1( veh, mod1Colour[1], mod1Colour[2], mod1Colour[3] )
+	SetVehicleModColor_2( veh, mod2Colour[1], mod2Colour[2] )
+
+	SetVehicleColours( veh, primaryColour, secondaryColour )
+
+	if ( custPrimaryColour[1] ~= nil and custPrimaryColour[2] ~= nil and custPrimaryColour[3] ~= nil ) then
+		SetVehicleCustomPrimaryColour( veh, custPrimaryColour[1], custPrimaryColour[2], custPrimaryColour[3] )
+	end
+
+	if ( custSecondaryColour[1] ~= nil and custSecondaryColour[2] ~= nil and custSecondaryColour[3] ~= nil ) then
+		SetVehicleCustomPrimaryColour( veh, custSecondaryColour[1], custSecondaryColour[2], custSecondaryColour[3] )
+	end
+
+	SetVehicleNeonLightsColour( veh, neonColour[1], neonColour[2], neonColour[3] )
+
+	for i = 0, 3 do
+		SetVehicleNeonLightEnabled( veh, i, false )
+	end
+
+	for k, v in pairs( neonToggles ) do
+		local index = tonumber( v )
+		SetVehicleNeonLightEnabled( veh, index, true )
+	end
+
+	SetVehicleDirtLevel(veh, 0.0)
+
+	return veh
+end
+
+--Map Blips
+Citizen.CreateThread(function()
+    local blips = {}
+    for ln,loc in pairs(xnGarageConfig.locations) do
+        local x,y,z = ToCoord(loc.inLocation[1],false) -- Get coords
+        local blip = AddBlipForCoord(x,y,z) -- Create blip
+
+        -- Set blip option
+        SetBlipSprite(blip, 357)
+        SetBlipColour(blip, 0)
+        SetBlipAsShortRange(blip, true)
+        SetBlipCategory(blip, 9)
+        BeginTextCommandSetBlipName("STRING")
+    	      AddTextComponentString(ln)
+    	EndTextCommandSetBlipName(blip)
+
+        -- Save handle to blip table
+        blips[#blips+1] = blip
+    end
+end)
+
+-- Just a return function for xnov:reqVehicles
+local vehicleTable = {}
+RegisterNetEvent("xnov:recVehicles")
+AddEventHandler("xnov:recVehicles", function(data)
+    vehicleTable = data
+end)
+
+RegisterNetEvent("xnov:message")
+AddEventHandler("xnov:message", function(content,time)
+    print("xnov Message: "..content)
+    Citizen.CreateThread(function()
+        local draw = true
+        SetTimeout(time or 5000, function() draw = false end)
+        --PlaySoundFrontend(soundId, audioName, audioRef, p3) posible attention sound like in online
+        while draw do
+            Citizen.Wait(0)
+            BeginTextCommandDisplayHelp("STRING")
+                AddTextComponentSubstringPlayerName(content)
+            EndTextCommandDisplayHelp(0, 0, 0, -1)
+        end
+    end)
+end)
+
+local saveCallbackResponse = false
+RegisterNetEvent("xnov:savecallback")
+AddEventHandler("xnov:savecallback", function(response) saveCallbackResponse = response end)
+
+--[[
+RegisterNetEvent("xnov:areYouInThisGarage")
+AddEventHandler("xnov:areYouInThisGarage", function(garageName, askingply)
+    -- since we have `askingply` we could do some sort of block list saying x person cannot enter your garage
+    print("xnov:areYouInThisGarage: "..garageName.." : "..askingply)
+    Citizen.CreateThread(function()
+        if garageName then
+            local found = false
+
+            if xnGarage then
+                if xnGarage.curGarage and xnGarage.curGarageName then
+                    if xnGarage.curGarageName == garageName then found = true end
+                end
+            end
+
+            TriggerServerEvent("xnov:areYouInThisGarage:callback", askingply, found, GetPlayerServerId(PlayerId())) -- not sure if this works yet
+        end
+    end)
+end)
+
+RegisterNetEvent("xnov:queryGarages:callback")
+AddEventHandler("xnov:queryGarages:callback", function(response)
+    print("xnov:queryGarages:callback ".. json.encode(response) .. " or " .. tostring(response))
+    if json.encode(response) == "[]" or not response then -- i need an is empty ffs
+        bmAvailablePlayers = false
+    else
+        bmAvailablePlayers = response
+    end
+end)
+
+RegisterNetEvent("xnov:addPlayerToGarage")
+AddEventHandler("xnov:addPlayerToGarage", function(ply)
+    local ply = ply
+    if xnGarage.curGarage and not xnGarage.playersInside[ply] then
+        xnGarage.playersInside[ply] = true -- xnGarage.playersInside uses server id's
+        for pos,vehNetId in ipairs(xnGarage.vehiclenet) do
+            SetNetworkIdSyncToPlayer(vehNetId,GetPlayerFromServerId(ply),true)
+        end
+        TriggerServerEvent("xnov:addPlayerToGarage:callback",ply,xnGarage) -- "sync"
+    end
+end)
+
+RegisterNetEvent("xnov:addMeToPlayersGarage:callback")
+AddEventHandler("xnov:addMeToPlayersGarage:callback", function(newXNGarage)
+    print(json.encode(newXNGarage))
+    xnGarage = newXNGarage
+    --LoadGarage()
+    local x,y,z,h = ToCoord(xnGarage.curGarage.spawnInLocation, true)
+    FancyTeleport(GetPlayerPed(-1), x,y,z,h)
+end)]]
+
+-- Load Garage
+function LoadGarage()
+    Citizen.CreateThread(function()
+        RefreshInterior(xnGarage.curGarage.intId)
+        vehicleTable = false
+        TriggerServerEvent("xnov:reqVehicles") --TriggerServerEvent("xnov:reqVehicles", GetPlayerServerId(xnGarage.garageOwner))
+        while not vehicleTable do Citizen.Wait(0) end
+        local vt = vehicleTable
+
+        for _,oldVeh in pairs(xnGarage.vehicles) do
+            SetEntityAsMissionEntity(oldVeh)
+            DeleteVehicle(oldVeh)
+        end
+        xnGarage.vehicles = {}
+
+        for pos,vehData in ipairs(vehicleTable[xnGarage.curGarageName]) do
+            if vehData and vehData ~= "none" then
+                Citizen.CreateThread(function()
+                    local isInVehicle, veh, vehModel = GetVehicle()
+                    local x,y,z,h = ToCoord(xnGarage.curGarage.carLocations[pos], true)
+                    local model = tonumber(vehData["model"])
+                    if xnGarage.vehicleTaken and pos == xnGarage.vehicleTakenPos and not IsEntityDead(xnGarage.vehicleTaken) then
+                        print("we got this car, do de do de.")
+                    else
+                        -- Load
+                        RequestModel(model)
+                        while not HasModelLoaded(model) do Citizen.Wait(0) end
+
+                        -- Create
+                        xnGarage.vehicles[pos] = CreateVehicleFromData(vehData, x,y,z+1.0,h,true)
+
+                        -- Godmode
+                        SetEntityInvincible(xnGarage.vehicles[pos], true)
+        				SetEntityProofs(xnGarage.vehicles[pos], true, true, true, true, true, true, 1, true)
+        				SetVehicleTyresCanBurst(xnGarage.vehicles[pos], false)
+        				SetVehicleCanBreak(xnGarage.vehicles[pos], false)
+        				SetVehicleCanBeVisiblyDamaged(xnGarage.vehicles[pos], false)
+        				SetEntityCanBeDamaged(xnGarage.vehicles[pos], false)
+        				SetVehicleExplodesOnHighExplosionDamage(xnGarage.vehicles[pos], false)
+
+                        --[[ Network
+                        if xnGarage.garageOwner ~= PlayerId() then SetVehicleUndriveable(xnGarage.vehicles[pos],true) end
+                        xnGarage.vehiclenet[pos] = VehToNet(xnGarage.vehicles[pos])
+                        for i=0,63 do
+                            if not xnGarage.playersInside[i] and i ~= GetPlayerServerId(PlayerId()) then
+                                SetNetworkIdSyncToPlayer(NetworkGetNetworkIdFromEntity(xnGarage.vehicles[pos]),GetPlayerFromServerId(i),false)
+                            end
+                        end
+                        print(xnGarage.vehiclenet[pos])]]
+                        Citizen.Wait(500)
+                    end
+                    Citizen.CreateThread(function()
+                        while true do
+                            Citizen.Wait(0)
+                            local isInVehicle, veh = GetVehicle()
+                            if isInVehicle and veh == xnGarage.vehicles[pos] then
+                                local x,y,z = table.unpack(GetEntityVelocity(veh))
+                                if (x > 0.5 or y > 0.5 or z > 0.5) or (x < -0.5 or y < -0.5 or z < -0.5) then
+                                    Citizen.CreateThread(function()
+                                        xnGarage.vehicleTakenPos = pos
+
+                                        local ent = GetPlayerPed(-1)
+                                        local x,y,z,h = ToCoord(xnGarage.curGarage.spawnOutLocation, true)
+
+                                        DoScreenFadeOut(500)
+                                        while IsScreenFadingOut() do Citizen.Wait(0) end
+                                        FreezeEntityPosition(ent, true)
+                                        SetEntityCoords(ent, x, y, z)
+
+                                        -- Delete All Prev Vehicles
+                                        for i,veh in ipairs(xnGarage.vehicles) do
+                                            print(i..":"..veh)
+                                            SetEntityAsMissionEntity(veh)
+                                            DeleteVehicle(veh)
+                                            Citizen.Wait(10)
+                                        end
+                                        if xnGarage.vehicleTaken then DeleteVehicle(xnGarage.vehicleTaken) end -- Delete the last vehicle taken out if there is one
+
+                                        -- Create new vehicle
+                                        xnGarage.vehicleTaken = CreateVehicleFromData(vehData, x,y,z+1.0,h)
+                                        FreezeEntityPosition(xnGarage.vehicleTaken, true)
+                                        Citizen.Wait(1000)
+                                        SetEntityAsMissionEntity(xnGarage.vehicleTaken)
+
+                                        SetPedIntoVehicle(ent, xnGarage.vehicleTaken, -1) -- Put the ped into the new vehicle
+                                        Citizen.Wait(1000)
+
+                                        FreezeEntityPosition(ent, false)
+                                        FreezeEntityPosition(xnGarage.vehicleTaken, false)
+                                        Citizen.Wait(3000)
+
+                                        DoScreenFadeIn(500)
+                                        while IsScreenFadingIn() do Citizen.Wait(0) end
+
+                                        xnGarage.curGarage = false
+                                        xnGarage.curGarageName = false
+                                    end)
+                                    break
+                                end
+                            end
+                        end
+                    end)
+                end)
+            end
+        end
+    end)
+end
+
+-- Management Menu
+Citizen.CreateThread(function()
+    local context = {
+        operation = false,
+        entity = false,
+        position = false,
+        name = false,
+    }
+
+	WarMenu.CreateMenu('vmm', 'Vehicle Management')
+        WarMenu.CreateSubMenu('vmm:veh', 'vmm', 'Manage Vehicle')
+            WarMenu.CreateSubMenu('vmm:move', 'vmm:veh', 'Where?')
+            WarMenu.CreateSubMenu('vmm:delete', 'vmm:veh', 'Are You Sure?')
+
+	WarMenu.SetSubTitle('vmm', "main menu")
+
+
+	while true do
+		if WarMenu.IsMenuOpened('vmm') and xnGarage then --and xnGarage.garageOwner == PlayerId() then
+            local hasAny = false
+            for i=1,#xnGarage.curGarage.carLocations do
+                if xnGarage.vehicles[i] then
+                    hasAny = true
+                    local n = GetDisplayNameFromVehicleModel(GetEntityModel(xnGarage.vehicles[i])) ~= "CARNOTFOUND" and GetLabelText(GetDisplayNameFromVehicleModel(GetEntityModel(xnGarage.vehicles[i]))) or "NULL" -- woah
+                    if WarMenu.MenuButton("Vehicle "..i,"vmm:veh",n) then
+                        context = {
+                            operation = "manage",
+                            entity = xnGarage.vehicles[i],
+                            position = i,
+                            name = n,
+                        }
+                    end
+                end
+            end
+            if not hasAny then WarMenu.Button("You have no vehicles in this garage!") end
+        WarMenu.Display()
+
+        elseif WarMenu.IsMenuOpened('vmm:veh') then
+            if WarMenu.MenuButton("Move "..context.name,"vmm:move") then context.operation = "move" end
+            if WarMenu.MenuButton("~r~Delete "..context.name.."?","vmm:delete") then context.operation = "delete" end
+        WarMenu.Display()
+
+        elseif WarMenu.IsMenuOpened('vmm:move') then
+            for i=1,#xnGarage.curGarage.carLocations do
+                if WarMenu.Button("Position "..i) then
+                    Citizen.CreateThread(function()
+                        TriggerServerEvent("xnov:moveVehicle",xnGarage.curGarageName,context.position,i)
+                        LoadGarage()
+                        WarMenu.CloseMenu()
+                    end)
+                end
+            end
+        WarMenu.Display()
+
+        elseif WarMenu.IsMenuOpened('vmm:delete') then
+            WarMenu.MenuButton("No",'vmm:veh')
+            if WarMenu.Button("Yes") and context.operation == "delete" then
+                Citizen.CreateThread(function()
+                    TriggerServerEvent("xnov:deleteVehicle",xnGarage.curGarageName,context.position)
+                    LoadGarage()
+                    WarMenu.CloseMenu()
+                end)
+            end
+        WarMenu.Display()
+
+        elseif WarMenu.IsMenuAboutToBeClosed() then
+            context = {}
+        end
+
+        Citizen.Wait(0)
+	end
+end)
+
+
+-- Mechanic Menu
+-- CONTEXTUAL WARMENU V3
+Citizen.CreateThread(function()
+    local context = {
+        location = false,
+    }
+
+    WarMenu.CreateMenu('mech', 'Mechanic')
+        WarMenu.CreateSubMenu('mech:location', 'mech', 'Garages')
+
+	WarMenu.SetSubTitle('mech', "main menu")
+
+
+	while true do
+		if WarMenu.IsMenuOpened('mech') then
+            if vehicleTable == {} then
+                WarMenu.Button("You have no vehicles saved in any garage!")
+            else
+                for ln,location in pairs(vehicleTable) do
+                    if WarMenu.MenuButton(ln,"mech:location") then context.location = ln end
+                end
+            end
+        WarMenu.Display()
+
+        elseif WarMenu.IsMenuOpened('mech:location') then
+            for pos,vehData in ipairs(vehicleTable[context.location]) do
+                if vehData ~= "none" then
+                    local model = tonumber(vehData["model"])
+
+                    if GetEntityModel(xnGarage.vehicleTaken) ~= model then -- Don't display the vehicle we currently have out
+                        local name = GetDisplayNameFromVehicleModel(model) ~= "CARNOTFOUND" and GetLabelText(GetDisplayNameFromVehicleModel(model)) or "Name not given for hash: "..model -- more of this shit
+                        if WarMenu.Button(name) then
+                            RequestModel(model)
+                            while not HasModelLoaded(model) do Citizen.Wait(0) end
+                            print(json.encode(vehData),vehData["model"])
+                            xnGarage.vehicleTakenPos = pos
+
+                            if xnGarage.vehicleTaken then DeleteVehicle(xnGarage.vehicleTaken) end
+
+                            xnGarage.vehicleTaken = CreateVehicleFromData(vehData, GetEntityCoords(GetPlayerPed(-1)),GetEntityHeading(GetPlayerPed(-1)))
+                            SetEntityAsMissionEntity(xnGarage.vehicleTaken)
+                            SetPedIntoVehicle(GetPlayerPed(-1), xnGarage.vehicleTaken, -1)
+                            WarMenu.CloseMenu()
+                        end
+                    end
+                end
+            end
+        WarMenu.Display()
+
+        elseif WarMenu.IsMenuAboutToBeClosed() then context = {}
+
+        elseif IsControlJustReleased(0, 167) then
+            vehicleTable = false
+            TriggerServerEvent("xnov:reqVehicles")
+            while not vehicleTable do Citizen.Wait(0) end
+
+            WarMenu.OpenMenu("mech")
+        end
+
+		Citizen.Wait(0)
+	end
+end)
+
+--[[ Buzzer Menu
+Citizen.CreateThread(function()
+    WarMenu.CreateMenu('bm', 'Buzzer')
+
+	WarMenu.SetSubTitle('bm', "main menu")
+
+
+	while true do
+		if WarMenu.IsMenuOpened('bm') then
+            if bmAvailablePlayers == {} or bmAvailablePlayers == nil then
+                WarMenu.Button("Loading...")
+            elseif bmAvailablePlayers == false then
+                WarMenu.Button("There are no other players are in this\n garage.")
+            else
+                for k,v in pairs(bmAvailablePlayers) do
+                    print("xd123 k="..tostring(k).." v="..tostring(v))
+                    if k then
+                        if WarMenu.Button(GetPlayerName(GetPlayerFromServerId(k))) then
+                            WarMenu.CloseMenu()
+                            TriggerServerEvent("xnov:addMeToPlayersGarage", k) -- ply is a server id i hope
+                        end
+                    end
+                end
+            end
+        WarMenu.Display()
+
+        elseif WarMenu.IsMenuAboutToBeClosed() then bmAvailablePlayers = {} end
+
+
+		Citizen.Wait(0)
+	end
+end)]]
+
+-- Main
+Citizen.CreateThread(function()
+    while true do
+        local isInVehicle, veh = GetVehicle()
+        if not xnGarage.curGarage then
+            for ln,location in pairs(xnGarageConfig.locations) do
+                local ent = isInVehicle and veh or GetPlayerPed(-1)
+                local ix,iy,iz = ToCoord(location.inLocation[1],false)
+                --if Vdist2(GetEntityCoords(ent),ix,iy,iz) < location.inLocation[2] then
+                local posDebug = location.inLocation[3] or false
+
+                if posDebug then
+                    --DrawMarker(28, ix,iy,iz, 0.0,0.0,0.0, 180.0,180.0,180.0, location.inLocation[2]+0.0,location.inLocation[2]+0.0,location.inLocation[2]+0.0, 0,128,255,100, false, true, 2, false, false, false, false)
+                    if Vdist2(GetEntityCoords(ent),ix,iy,iz) < location.inLocation[2]*2.5 then
+                        DrawRect(0.5, 0.5, 0.1, 0.1, 0, 200, 0, 100)
+                    end
+                else
+                    if Vdist2(GetEntityCoords(ent),ix,iy,iz) < location.inLocation[2]*2.5 then
+                        if isInVehicle then SetVehicleHalt(veh,1.0,1) end -- Nice Native!
+
+                        if not xnGarage.curGarage then --if not xnGarage.garageOwner then
+                            xnGarage.curGarage = location
+                            xnGarage.curGarageName = ln
+                            --xnGarage.playersInside[GetPlayerServerId(PlayerId())] = true
+                            if not isInVehicle then
+                                --xnGarage.garageOwner = PlayerId()
+                                LoadGarage()
+                                local x,y,z,h = ToCoord(xnGarage.curGarage.spawnInLocation, true)
+                                FancyTeleport(ent, x,y,z,h)
+                                Citizen.Wait(500)
+                            else
+                                saveCallbackResponse = false
+                                if xnGarage.vehicleTaken ~= veh then
+                                    TriggerServerEvent("xnov:saveVehicle",VehicleToData(veh),ln)
+                                else
+                                    TriggerServerEvent("xnov:saveVehicle",VehicleToData(veh),ln,xnGarage.vehicleTakenPos)
+                                end
+                                --FreezeEntityPosition(veh, true)
+                                while not saveCallbackResponse do Citizen.Wait(0) end
+
+                                if saveCallbackResponse == "no_slot" then
+                                    xnGarage.curGarage = false
+                                    xnGarage.curGarageName = false
+                                    --xnGarage.garageOwner = false
+                                    --xnGarage.playersInside = {}
+                                    while Vdist2(GetEntityCoords(ent),ix,iy,iz) < location.inLocation[2]*2.5 do
+                                        Citizen.Wait(0)
+                                        DisplayHelpTextThisFrame("WEB_VEH_FULL", 1)
+                                    end
+                                end
+
+                                Citizen.Wait(1000)
+                                if saveCallbackResponse == "success" then
+                                    --[[if xnGarage.vehicleTaken and xnGarage.vehicleTaken == ent then
+                                        -- maintaining continuity i guess
+                                        local pos = xnGarage.vehicleTakenPos
+                                        local ent = GetPlayerPed(-1)
+
+                                        DoScreenFadeOut(500)
+                                        while IsScreenFadingOut() do Citizen.Wait(500) end
+                                        SetEntityAsMissionEntity(veh)
+                                        DeleteVehicle(veh)
+
+                                        xnGarage.vehicleTaken = false
+                                        xnGarage.vehicleTakenPos = false
+                                        --xnGarage.garageOwner = PlayerId()
+
+                                        LoadGarage()
+
+                                        local x,y,z,h = ToCoord(xnGarage.curGarage.spawnInLocation, true)
+                                        SetEntityCoords(ent, x, y, z)
+                                        if h then SetEntityHeading(ent, h) SetGameplayCamRelativeHeading(0) end
+                                        FreezeEntityPosition(ent, false)
+
+                                        Citizen.Wait(1000)
+
+                                        print("ye",xnGarage.vehicles[pos])
+                                        SetPedIntoVehicle(ent, xnGarage.vehicles[pos], -1)
+                                        Citizen.Wait(4000)
+
+                                        DoScreenFadeIn(500)
+                                        while IsScreenFadingIn() do Citizen.Wait(0) end
+
+                                        TaskLeaveVehicle(ent, xnGarage.vehicles[pos], 0)
+                                    else]]
+                                        xnGarage.vehicleTaken = false
+                                        xnGarage.vehicleTakenPos = false
+                                        --xnGarage.garageOwner = PlayerId()
+
+                                        LoadGarage()
+
+                                        local x,y,z,h = ToCoord(xnGarage.curGarage.spawnInLocation, true)
+                                        FancyTeleport(GetPlayerPed(-1), x,y,z,h)
+                                        Citizen.Wait(2000)
+                                        SetEntityAsMissionEntity(veh)
+                                        DeleteVehicle(veh)
+                                    --end
+                                    Citizen.Wait(500)
+                                end
+                            end
+                            saveCallbackResponse = false
+                        else
+                            LoadGarage()
+
+                            local x,y,z,h = ToCoord(xnGarage.curGarage.spawnInLocation, true)
+                            SetEntityCoords(ent, x, y, z)
+                            if h then SetEntityHeading(ent, h) SetGameplayCamRelativeHeading(0) end
+                            FreezeEntityPosition(ent, false)
+
+                            Citizen.Wait(5000)
+
+                            DoScreenFadeIn(500)
+                            while IsScreenFadingIn() do Citizen.Wait(0) end
+                        end
+                    end
+                end
+                --[[local mx,my,mz = ToCoord(location.buzzerMarker,false)
+                DrawMarker(1, mx,my,mz, 0.0, 0.0, 0.0, 180.0, 180.0, 180.0, 1.0, 1.0, 1.0, 0, 128, 255, 100, false, true, 2, false, false, false, false)
+                if Vdist2(GetEntityCoords(ent),mx,my,mz) <= 1.5 then
+                    DisplayHelpTextThisFrame("MP_PROP_BUZZ1B", 0)
+                    if IsControlJustPressed(1, 51) then
+                        TriggerServerEvent("xnov:queryGarages",ln)
+                        WarMenu.OpenMenu("bm") -- bm for buzzer menu of course :^)
+                        Citizen.Wait(500)
+                    end
+                end]]
+            end
+
+        else
+            local gr = xnGarage.curGarage
+            local ent = isInVehicle and veh or GetPlayerPed(-1)
+            -- Exit Marker
+            local ox,oy,oz = ToCoord(gr.outMarker)
+            DrawMarker(1, ox,oy,oz, 0.0, 0.0, 0.0, 180.0, 180.0, 180.0, 1.5, 1.5, 1.0, 0, 128, 255, 100, false, true, 2, false, false, false, false)
+            if Vdist2(GetEntityCoords(ent),ToCoord(gr.outMarker)) <= 1.5 then
+                local x,y,z,h = ToCoord(xnGarage.curGarage.spawnOutLocation,true)
+                FancyTeleport(ent, x,y,z,h, 500,5000,500, true)
+                xnGarage.curGarage = false
+                xnGarage.curGarageName = false
+                --xnGarage.garageOwner = false
+                --xnGarage.playersInside = {}
+                xnGarage = xnGarage or xnGarage_default
+                Citizen.Wait(500)
+            end
+
+            local mx,my,mz = ToCoord(gr.modifyMarker)
+            DrawMarker(1, mx,my,mz, 0.0, 0.0, 0.0, 180.0, 180.0, 180.0, 1.5, 1.5, 1.0, 0, 128, 255, 100, false, true, 2, false, false, false, false)
+            if Vdist2(GetEntityCoords(ent),ToCoord(gr.modifyMarker)) <= 1.5 then
+                DisplayHelpTextThisFrame("MP_MAN_VEH", 0) -- native localisation is cool
+                if IsControlJustPressed(1, 51) then
+                    WarMenu.OpenMenu("vmm")
+                    Citizen.Wait(500)
+                end
+            end
+
+        end
+
+        Citizen.Wait(0)
+    end
+end)
+
+-- Slow walk loop
+Citizen.CreateThread(function()
+    while true do
+        Citizen.Wait(0)
+        if xnGarage.curGarage and xnGarageConfig.SlowWalk then
+            DisableControlAction(0, 21, true)
+            DisableControlAction(0, 22, true)
+        end
+    end
+end)
+
+-- Personal vehicle blip
+Citizen.CreateThread(function()
+    local blip = false
+    while true do
+        Citizen.Wait(0)
+        local prevEntId = xnGarage.vehicleTaken
+        while not xnGarage.vehicleTaken or prevEntId == xnGarage.vehicleTaken do Citizen.Wait(0) end
+
+        blip = AddBlipForEntity(xnGarage.vehicleTaken)
+
+        SetBlipSprite(blip, 225)
+
+        BeginTextCommandSetBlipName("STRING")
+		AddTextComponentSubstringTextLabel("PVEHICLE")
+		EndTextCommandSetBlipName(blip)
+
+        Citizen.CreateThread(function() -- I could probably make this better but eh
+            local myBlip = blip
+            while myBlip == blip do
+                Citizen.Wait(0)
+                local isInVehicle, veh = GetVehicle(_,true)
+                if isInVehicle and veh == xnGarage.vehicleTaken then
+                    if GetBlipInfoIdDisplay(myBlip) ~= 3 then
+                        SetBlipDisplay(myBlip, 3)
+                        BeginTextCommandSetBlipName("STRING")
+                		AddTextComponentSubstringTextLabel("PVEHICLE")
+                		EndTextCommandSetBlipName(myBlip)
+                    end
+                else
+                    if GetBlipInfoIdDisplay(myBlip) ~= 2 then
+                        SetBlipDisplay(myBlip, 2)
+                        BeginTextCommandSetBlipName("STRING")
+                		AddTextComponentSubstringTextLabel("PVEHICLE")
+                		EndTextCommandSetBlipName(myBlip)
+                    end
+                end
+            end
+        end)
+    end
+end)
+
+-- Hide players in garage
+Citizen.CreateThread(function()
+    while true do
+        Citizen.Wait(0)
+        if xnGarage.curGarage then
+            for i=0,63 do
+                if i ~= GetPlayerServerId(PlayerId()) then --if not xnGarage.playersInside[i] and i ~= GetPlayerServerId(PlayerId()) then
+                    SetPlayerInvisibleLocally(GetPlayerFromServerId(i))
+                end
+            end
+        end
+    end
+end)
+
+end) -- no, this is not mismatched
