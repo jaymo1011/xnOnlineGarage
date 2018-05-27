@@ -1,3 +1,3 @@
 # xnOnlineGarage
 GTA:O Garages in FiveM!
-Link to forum thread here dummy
+https://forum.fivem.net/t/xnonlinegarage-v1-0-1-gta-o-garages-in-fivem/113558
