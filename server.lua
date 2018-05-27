@@ -7,23 +7,43 @@ end
 local function loadPlayerFile(player)
     local fileName = GetPlayerIdentifiers(player)[2]
     local ret = LoadResourceFile(resourceName, "saves/"..fileName..".json")
-    if ret then return ret else return "[]" end -- return empty table if theres no file
+    if ret then return ret else return "[]" end
 end
 
 RegisterServerEvent("xnov:reqVehicles")
 AddEventHandler("xnov:reqVehicles", function(player)
-    local ply = player or source -- Sometimes this helps, dunno why
-    local data = json.decode(loadPlayerFile(ply))
+    local ply = player or source
+    local data = json.decode(loadPlayerFile(ply)) or {}
     TriggerClientEvent("xnov:recVehicles",source,data)
 end)
 
 RegisterServerEvent("xnov:saveVehicle")
-AddEventHandler("xnov:saveVehicle", function(vehicleData, location, position,callback)
-    local player = source -- Sometimes this helps, dunno why
-    local data = json.decode(loadPlayerFile(player))
+AddEventHandler("xnov:saveVehicle", function(vehicleData, location, position, oldLocation)
+    local player = source
+    local data = json.decode(loadPlayerFile(player)) or {}
     if not data[location] then data[location] = {} end
+    local oldLocation = oldLocation or location
+    if not data[oldLocation] then data[oldLocation] = {} end
 
-    if not position then
+    if location == oldLocation then
+        if not position then
+            local found = false
+            for i=1,#xnGarageConfig.locations[location].carLocations do
+                if data[location][i] == nil or data[location][i] == "none" then
+                    data[location][i] = vehicleData
+                    found = true
+                    break
+                end
+            end
+            if not found then TriggerClientEvent("xnov:savecallback", source, "no_slot") return end
+        else
+            data[location][position] = vehicleData
+        end
+    else
+        if data[oldLocation] then
+            data[oldLocation][position] = "none"
+        end
+
         local found = false
         for i=1,#xnGarageConfig.locations[location].carLocations do
             if data[location][i] == nil or data[location][i] == "none" then
@@ -33,8 +53,6 @@ AddEventHandler("xnov:saveVehicle", function(vehicleData, location, position,cal
             end
         end
         if not found then TriggerClientEvent("xnov:savecallback", source, "no_slot") return end
-    else
-        data[location][position] = vehicleData
     end
     savePlayerFile(player, json.encode(data))
 
@@ -43,8 +61,8 @@ end)
 
 RegisterServerEvent("xnov:deleteVehicle")
 AddEventHandler("xnov:deleteVehicle", function(location, position)
-    local player = source -- Sometimes this helps, dunno why
-    local data = json.decode(loadPlayerFile(player))
+    local player = source
+    local data = json.decode(loadPlayerFile(player)) or {}
     if data[location] and data[location][position] then data[location][position] = "none" end
 
     savePlayerFile(player, json.encode(data))
@@ -54,8 +72,8 @@ end)
 
 RegisterServerEvent("xnov:moveVehicle")
 AddEventHandler("xnov:moveVehicle", function(location, oldPosition, newPosition)
-    local player = source -- Sometimes this helps, dunno why
-    local data = json.decode(loadPlayerFile(player))
+    local player = source
+    local data = json.decode(loadPlayerFile(player)) or {}
     if data[location] then
         local oldVehicleData
         if data[location][newPosition] then
@@ -63,7 +81,6 @@ AddEventHandler("xnov:moveVehicle", function(location, oldPosition, newPosition)
         else
             oldVehicleData = "none"
         end
-        print(newPosition,oldPosition,oldVehicleData)
         data[location][newPosition] = data[location][oldPosition]
         data[location][oldPosition] = oldVehicleData
     end
