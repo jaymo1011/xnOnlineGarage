@@ -647,6 +647,7 @@ Citizen.CreateThread(function()
                             if isInVehicle then SetVehicleHalt(veh,1.0,1) end -- Nice Native!
                             xnGarage.curGarage = location
                             xnGarage.curGarageName = ln
+                            if xnGarageConfig.PrintGarageName then print("[DEBUG] Entered Garage: "..tostring(ln)) end
                             if not isInVehicle then
                                 LoadGarage()
                                 local x,y,z,h = ToCoord(xnGarage.curGarage.spawnInLocation, true)
@@ -809,6 +810,57 @@ Citizen.CreateThread(function()
                 end
             end
         end
+    end
+end)
+
+Citizen.CreateThread(function()
+    if xnGarageConfig.EnableInteriors then
+    	RequestIpl("bkr_bi_id1_23_door")
+    	RequestIpl("bkr_bi_hw1_13_int")
+
+        RequestIpl("bkr_biker_interior_placement_interior_0_biker_dlc_int_01_milo")
+        RequestIpl("bkr_biker_interior_placement_interior_1_biker_dlc_int_02_milo")
+    	EnableInteriorProp(246529, "mod_booth")
+    	EnableInteriorProp(246529, "gun_locker")
+    	EnableInteriorProp(246529, "lower_walls_default")
+    	SetInteriorPropColor(246529, "lower_walls_default", 3)
+    	EnableInteriorProp(246529, "walls_02")
+    	SetInteriorPropColor(246529, "walls_02", 3)
+    	EnableInteriorProp(246529, "mural_01")
+    	EnableInteriorProp(246529, "furnishings_02")
+        RefreshInterior(246529)
+
+        RequestIpl("ex_exec_warehouse_placement_interior_0_int_warehouse_m_dlc_milo ")
+        RequestIpl("ex_exec_warehouse_placement_interior_1_int_warehouse_s_dlc_milo ")
+        RequestIpl("ex_exec_warehouse_placement_interior_2_int_warehouse_l_dlc_milo ")
+
+        RequestIpl("imp_dt1_11_cargarage_a")
+        EnableInteriorProp(256513, "Garage_Decor_01")
+        EnableInteriorProp(256513, "Lighting_Option01")
+        EnableInteriorProp(256513, "Numbering_Style01_N1")
+        EnableInteriorProp(256513, "Floor_vinyl_01")
+        RefreshInterior(256513)
+
+        RequestIpl("imp_dt1_02_cargarage_a")
+        EnableInteriorProp(253441, "Garage_Decor_02")
+        EnableInteriorProp(253441, "Lighting_Option02")
+        EnableInteriorProp(253441, "Numbering_Style02_N1")
+        EnableInteriorProp(253441, "Floor_vinyl_02")
+        RefreshInterior(253441)
+
+        RequestIpl("imp_sm_13_cargarage_a")
+        EnableInteriorProp(254465, "Garage_Decor_03")
+        EnableInteriorProp(254465, "Lighting_Option03")
+        EnableInteriorProp(254465, "Numbering_Style03_N1")
+        EnableInteriorProp(254465, "Floor_vinyl_03")
+        RefreshInterior(254465)
+
+        RequestIpl("imp_sm_15_cargarage_a")
+        EnableInteriorProp(255489, "Garage_Decor_04")
+        EnableInteriorProp(255489, "Lighting_Option04")
+        EnableInteriorProp(255489, "Numbering_Style04_N1")
+        EnableInteriorProp(255489, "Floor_vinyl_04")
+        RefreshInterior(255489)
     end
 end)
 
