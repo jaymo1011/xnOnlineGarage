@@ -1,7 +1,6 @@
 WarMenu = { }
 
-WarMenu.debug = true
-
+WarMenu.debug = false
 
 local menus = { }
 local keys = { up = 172, down = 173, left = 174, right = 175, select = 176, back = 177 }

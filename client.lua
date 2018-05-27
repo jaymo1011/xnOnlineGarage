@@ -280,7 +280,7 @@ Citizen.CreateThread(function()
         SetBlipAsShortRange(blip, true)
         SetBlipCategory(blip, 9)
         BeginTextCommandSetBlipName("STRING")
-    	      AddTextComponentString(xnGarageConfig.GroupMarkers and "Garage" or ln)
+    	      AddTextComponentString(xnGarageConfig.GroupMapBlips and "Garage" or ln)
     	EndTextCommandSetBlipName(blip)
 
         -- Save handle to blip table
@@ -555,7 +555,7 @@ Citizen.CreateThread(function()
     }
 
     WarMenu.CreateMenu('mech', 'Mechanic')
-        WarMenu.CreateSubMenu('mech:location', 'mech', 'Garages')
+        WarMenu.CreateSubMenu('mech:location', 'mech', 'Vehicles')
 
 	WarMenu.SetSubTitle('mech', "main menu")
 
@@ -630,53 +630,63 @@ Citizen.CreateThread(function()
                     DrawMarker(20, ix,iy,iz+1.0, 0.0, 0.0, 0.0, 180.0, 0.0, 180.0, 1.5, 1.5, 1.0, 0, 128, 255, 100, false, true, 2, false, false, false, false)
                 end
 
+                local allowed = true
+                if IsThisModelABoat(vehModel) then allowed = false end
+                if IsThisModelAPlane(vehModel) then allowed = false end
+                if IsThisModelAHeli(vehModel) then allowed = false end
+                for _,blockedModel in ipairs(xnGarageConfig.BlacklistedVehicles) do
+                    if GetHashKey(blockedModel) == vehModel then allowed = false end
+                end
 
-                local allowed = not isInVehicle and true or (not IsThisModelABoat(vehModel) or not IsThisModelAHeli(vehModel) or not IsThisModelAPlane(vehModel))
-                if Vdist2(GetEntityCoords(ent),ix,iy,iz) < location.inLocation[2]*2.5 and not IsPedSprinting(GetPlayerPed(-1)) and allowed then
-                    DisplayHelpTextThisFrame("XNOV_ENTER", 1)
-                    if IsControlJustReleased(0, 51) then
-                        if isInVehicle then SetVehicleHalt(veh,1.0,1) end -- Nice Native!
-                        xnGarage.curGarage = location
-                        xnGarage.curGarageName = ln
-                        if not isInVehicle then
-                            LoadGarage()
-                            local x,y,z,h = ToCoord(xnGarage.curGarage.spawnInLocation, true)
-                            FancyTeleport(ent, x,y,z,h)
-                            Citizen.Wait(500)
-                        else
-                            saveCallbackResponse = false
-                            if xnGarage.vehicleTaken ~= veh then
-                                TriggerServerEvent("xnov:saveVehicle",VehicleToData(veh),ln)
+                if Vdist2(GetEntityCoords(ent),ix,iy,iz) < location.inLocation[2]*2.5 and not IsPedSprinting(GetPlayerPed(-1)) then
+                    if not allowed then
+                        DisplayHelpTextThisFrame("WEB_VEH_INV", 1)
+                    else
+                        DisplayHelpTextThisFrame("XNOV_ENTER", 1)
+                        if IsControlJustReleased(0, 51) then
+                            if isInVehicle then SetVehicleHalt(veh,1.0,1) end -- Nice Native!
+                            xnGarage.curGarage = location
+                            xnGarage.curGarageName = ln
+                            if not isInVehicle then
+                                LoadGarage()
+                                local x,y,z,h = ToCoord(xnGarage.curGarage.spawnInLocation, true)
+                                FancyTeleport(ent, x,y,z,h)
+                                Citizen.Wait(500)
                             else
-                                TriggerServerEvent("xnov:saveVehicle",VehicleToData(veh),ln,xnGarage.vehicleTakenPos,xnGarage.vehicleTakenLoc)
-                            end
-                            while not saveCallbackResponse do Citizen.Wait(0) end
+                                saveCallbackResponse = false
+                                if xnGarage.vehicleTaken ~= veh then
+                                    TriggerServerEvent("xnov:saveVehicle",VehicleToData(veh),ln)
+                                else
+                                    TriggerServerEvent("xnov:saveVehicle",VehicleToData(veh),ln,xnGarage.vehicleTakenPos,xnGarage.vehicleTakenLoc)
+                                end
+                                while not saveCallbackResponse do Citizen.Wait(0) end
 
-                            if saveCallbackResponse == "no_slot" then
-                                xnGarage.curGarage = false
-                                xnGarage.curGarageName = false
-                                while Vdist2(GetEntityCoords(ent),ix,iy,iz) < location.inLocation[2]*2.5 do
-                                    Citizen.Wait(0)
-                                    DisplayHelpTextThisFrame("WEB_VEH_FULL", 1)
+                                if saveCallbackResponse == "no_slot" then
+                                    xnGarage.curGarage = false
+                                    xnGarage.curGarageName = false
+                                    while Vdist2(GetEntityCoords(ent),ix,iy,iz) < location.inLocation[2]*2.5 do
+                                        Citizen.Wait(0)
+                                        DisplayHelpTextThisFrame("WEB_VEH_FULL", 1)
+                                    end
+                                end
+
+                                Citizen.Wait(1000)
+                                if saveCallbackResponse == "success" then
+                                    xnGarage.vehicleTaken = false
+                                    xnGarage.vehicleTakenPos = false
+                                    xnGarage.vehicleTakenLoc = false
+
+                                    LoadGarage()
+
+                                    SetEntityAsMissionEntity(veh)
+                                    DeleteVehicle(veh)
+                                    local x,y,z,h = ToCoord(xnGarage.curGarage.spawnInLocation, true)
+                                    FancyTeleport(GetPlayerPed(-1), x,y,z,h)
+                                    Citizen.Wait(2000)
                                 end
                             end
-
-                            Citizen.Wait(1000)
-                            if saveCallbackResponse == "success" then
-                                xnGarage.vehicleTaken = false
-                                xnGarage.vehicleTakenPos = false
-                                xnGarage.vehicleTakenLoc = false
-
-                                LoadGarage()
-
-                                SetEntityAsMissionEntity(veh)
-                                DeleteVehicle(veh)
-                                local x,y,z,h = ToCoord(xnGarage.curGarage.spawnInLocation, true)
-                                FancyTeleport(GetPlayerPed(-1), x,y,z,h)
-                                Citizen.Wait(2000)
-                            end
+                            saveCallbackResponse = false
                         end
-                        saveCallbackResponse = false
                     end
                 end
             end

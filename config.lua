@@ -1,7 +1,18 @@
 xnGarageConfig = {
     RestrictActions = true, -- Disallows running, jumping and pvp while inside a garage
-    GroupMarkers = true, -- Groups all markers under a single name
+    GroupMapBlips = true, -- Groups all map blips under a single name
+    ShowGarageMarkers = true, -- Shows a blue arrow in the middle of the garage trigger
 
+    BlacklistedVehicles = { -- A table of vehicles that should not be stored inside a garage
+        "DUMP",
+        "THRUSTER",
+    },
+
+
+    --[[
+        DONT EDIT BEYOND THIS POINT IF YOU WANT THINGS TO WORK CORRECTLY
+                            You Have Been Warned
+    ]]
     locations = {
         ["1161 Hawick St"] = {
         	inLocation = {
