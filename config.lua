@@ -15,7 +15,7 @@ xnGarageConfig = {
                             You Have Been Warned
     ]]
 
-    PrintGarageName = false -- Debug option, prints the garages you enter into your console
+    PrintGarageName = false, -- Debug option, prints the garages you enter into your console
 
     locations = {
         ["1161 Hawick St"] = {
