@@ -679,11 +679,12 @@ Citizen.CreateThread(function()
 
                                     LoadGarage()
 
-                                    SetEntityAsMissionEntity(veh)
-                                    DeleteVehicle(veh)
+                                    
                                     local x,y,z,h = ToCoord(xnGarage.curGarage.spawnInLocation, true)
                                     FancyTeleport(GetPlayerPed(-1), x,y,z,h)
                                     Citizen.Wait(2000)
+				    SetEntityAsMissionEntity(veh)
+                                    DeleteVehicle(veh)
                                 end
                             end
                             saveCallbackResponse = false
