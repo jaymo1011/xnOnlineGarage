@@ -680,6 +680,7 @@ Citizen.CreateThread(function()
 
                                     LoadGarage()
 
+
                                     local x,y,z,h = ToCoord(xnGarage.curGarage.spawnInLocation, true)
                                     FancyTeleport(GetPlayerPed(-1), x,y,z,h)
                                     Citizen.Wait(1000)
