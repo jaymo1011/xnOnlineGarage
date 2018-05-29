@@ -39,7 +39,7 @@ local function FancyTeleport(ent,x,y,z,h,fOut,hold,fIn,resetCam)
             DoScreenFadeOut(fOut or 500)
             while IsScreenFadingOut() do Citizen.Wait(0) end
 
-            SetEntityCoords(ent, x, y, z)
+            SetEntityCoords(ent, x, y, z+0.5)
             if h then SetEntityHeading(ent, h) SetGameplayCamRelativeHeading(0) end
             if GetVehicle() then SetVehicleOnGroundProperly(ent) end
             FreezeEntityPosition(ent, false)
