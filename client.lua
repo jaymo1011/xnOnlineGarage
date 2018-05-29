@@ -485,7 +485,7 @@ Citizen.CreateThread(function()
             for i=1,#xnGarage.curGarage.carLocations do
                 if xnGarage.vehicles[i] then
                     hasAny = true
-                    local n = GetDisplayNameFromVehicleModel(GetEntityModel(xnGarage.vehicles[i])) ~= "CARNOTFOUND" and GetLabelText(GetDisplayNameFromVehicleModel(GetEntityModel(xnGarage.vehicles[i]))) or "NULL" -- woah
+                    local n = GetDisplayNameFromVehicleModel(GetEntityModel(xnGarage.vehicles[i])) ~= "CARNOTFOUND" and GetLabelText(GetDisplayNameFromVehicleModel(GetEntityModel(xnGarage.vehicles[i]))) or "Custom Vehicle" -- woah
                     if WarMenu.MenuButton("Vehicle "..i,"vmm:veh",n) then
                         context = {
                             operation = "manage",
@@ -521,7 +521,7 @@ Citizen.CreateThread(function()
                         DrawMarker(20, x,y,z+2.0, 0.0, 0.0, 0.0, 180.0, 0.0, 180.0, 1.5, 1.5, 1.0, 0, 128, 255, 100, false, true, 2, false, false, false, false)
                     end
                 else
-                    WarMenu.Button("~HUD_COLOR_GREY~Position "..i)
+                    WarMenu.Button("~HUD_COLOUR_GREY~Position "..i)
                 end
             end
             local x,y,z = ToCoord(xnGarage.curGarage.carLocations[context.position] or {0,0,0,0}, false)
@@ -673,17 +673,19 @@ Citizen.CreateThread(function()
 
                                 Citizen.Wait(1000)
                                 if saveCallbackResponse == "success" then
+                                    local lastVeh = veh
                                     xnGarage.vehicleTaken = false
                                     xnGarage.vehicleTakenPos = false
                                     xnGarage.vehicleTakenLoc = false
 
                                     LoadGarage()
 
-                                    SetEntityAsMissionEntity(veh)
-                                    DeleteVehicle(veh)
                                     local x,y,z,h = ToCoord(xnGarage.curGarage.spawnInLocation, true)
                                     FancyTeleport(GetPlayerPed(-1), x,y,z,h)
-                                    Citizen.Wait(2000)
+                                    Citizen.Wait(1000)
+
+				                    SetEntityAsMissionEntity(lastVeh)
+                                    DeleteVehicle(lastVeh)
                                 end
                             end
                             saveCallbackResponse = false
