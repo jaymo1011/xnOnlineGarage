@@ -27,6 +27,17 @@ function GetVehicle(ply,doesNotNeedToBeDriver)
 	end
 	return found, veh, (veh ~= 0 and GetEntityModel(veh) or 0)
 end
+		
+function DeleteNearestVehicleOut(x,y,z)
+	local radius=2.0
+	local veh = GetClosestVehicle(x+0.0001,y+0.0001,z+0.0001, radius+0.0001, 0, 8192+4096+4+2+1)  -- boats, helicos
+	if not IsEntityAVehicle(veh) then veh = GetClosestVehicle(x+0.0001,y+0.0001,z+0.0001, radius+0.0001, 0, 4+2+1) end -- cars
+	
+	if veh == 0 or DeleteVehicle(veh) then
+		Wait(300)
+		return true
+	end
+end
 
 local lock_fancyteleport = false
 local function FancyTeleport(ent,x,y,z,h,fOut,hold,fIn,resetCam)
@@ -331,13 +342,14 @@ function LoadGarage(wait)
         while not vehicleTable do Citizen.Wait(0) end
         local vt = vehicleTable
 
-        for _,oldVeh in pairs(xnGarage.vehicles) do
-            SetEntityAsMissionEntity(oldVeh)
-            DeleteVehicle(oldVeh)
-        end
         xnGarage.vehicles = {}
 
         if vehicleTable and vehicleTable[xnGarage.curGarageName] then
+	    for pos=1,#xnGarageConfig.locations[xnGarage.curGarageName].carLocations do
+		local x,y,z,h = ToCoord(xnGarage.curGarage.carLocations[pos], true)	
+		DeleteNearestVehicleOut(x,y,z)
+	    end					
+	Citizen.Wait(1000)	
             for pos=1,#xnGarageConfig.locations[xnGarage.curGarageName].carLocations do -- Something weird with JSON causes something to be stupid with null keys
                 local vehData = vehicleTable[xnGarage.curGarageName][pos]
                 if vehData and vehData ~= "none" then
@@ -347,21 +359,21 @@ function LoadGarage(wait)
                         local model = tonumber(vehData["model"])
                         if xnGarage.vehicleTakenLoc == xnGarage.curGarageName and xnGarage.vehicleTaken and pos == xnGarage.vehicleTakenPos and not IsEntityDead(xnGarage.vehicleTaken) then
                         else
-                            -- Load
-                            RequestModel(model)
-                            while not HasModelLoaded(model) do Citizen.Wait(0) end
+							-- Load
+							RequestModel(model)
+							while not HasModelLoaded(model) do Citizen.Wait(0) end
 
-                            -- Create
-                            xnGarage.vehicles[pos] = CreateVehicleFromData(vehData, x,y,z+1.0,h,true)
+							-- Create
+							xnGarage.vehicles[pos] = CreateVehicleFromData(vehData, x,y,z+1.0,h,true)
 
-                            -- Godmode
-                            SetEntityInvincible(xnGarage.vehicles[pos], true)
-            				SetEntityProofs(xnGarage.vehicles[pos], true, true, true, true, true, true, 1, true)
-            				SetVehicleTyresCanBurst(xnGarage.vehicles[pos], false)
-            				SetVehicleCanBreak(xnGarage.vehicles[pos], false)
-            				SetVehicleCanBeVisiblyDamaged(xnGarage.vehicles[pos], false)
-            				SetEntityCanBeDamaged(xnGarage.vehicles[pos], false)
-            				SetVehicleExplodesOnHighExplosionDamage(xnGarage.vehicles[pos], false)
+							-- Godmode
+							SetEntityInvincible(xnGarage.vehicles[pos], true)
+							SetEntityProofs(xnGarage.vehicles[pos], true, true, true, true, true, true, 1, true)
+							SetVehicleTyresCanBurst(xnGarage.vehicles[pos], false)
+							SetVehicleCanBreak(xnGarage.vehicles[pos], false)
+							SetVehicleCanBeVisiblyDamaged(xnGarage.vehicles[pos], false)
+							SetEntityCanBeDamaged(xnGarage.vehicles[pos], false)
+							SetVehicleExplodesOnHighExplosionDamage(xnGarage.vehicles[pos], false)
                         end
                         Citizen.CreateThread(function()
                             while true do
@@ -375,24 +387,20 @@ function LoadGarage(wait)
                                             xnGarage.vehicleTakenLoc = xnGarage.curGarageName
 
                                             local ent = GetPlayerPed(-1)
-                                            local x,y,z,h = ToCoord(xnGarage.curGarage.spawnOutLocation, true)
+											local x,y,z,h = ToCoord(xnGarage.curGarage.spawnOutLocation, true)
 
                                             DoScreenFadeOut(500)
                                             while IsScreenFadingOut() do Citizen.Wait(0) end
                                             FreezeEntityPosition(ent, true)
                                             SetEntityCoords(ent, x, y, z)
 
-                                            -- Delete All Prev Vehicles
-                                            for i,veh in ipairs(xnGarage.vehicles) do
-                                                SetEntityAsMissionEntity(veh)
-                                                DeleteVehicle(veh)
-                                                Citizen.Wait(10)
-                                            end
-                                            if xnGarage.vehicleTaken then DeleteVehicle(xnGarage.vehicleTaken) end -- Delete the last vehicle taken out if there is one
-
-                                            -- Create new vehicle
-                                            xnGarage.vehicleTaken = CreateVehicleFromData(vehData, x,y,z+1.0,h)
+                                             -- Teleport vehicle to out side
+                                            xnGarage.vehicleTaken = GetVehiclePedIsUsing(GetPlayerPed(-1))
                                             FreezeEntityPosition(xnGarage.vehicleTaken, true)
+											SetEntityCoordsNoOffset(xnGarage.vehicleTaken,x+0.0001, y+0.0001, z+1.0, 0, 0, 1)
+											SetEntityHeading(xnGarage.vehicleTaken, h)
+											SetPedIntoVehicle(GetPlayerPed(-1), xnGarage.vehicleTaken, -1) -- Put the ped into the new vehicle
+											SetVehicleOnGroundProperly(xnGarage.vehicleTaken) -- Set vehicle on ground
                                             Citizen.Wait(1000)
                                             SetEntityAsMissionEntity(xnGarage.vehicleTaken)
 
