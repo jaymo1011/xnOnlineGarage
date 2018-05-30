@@ -345,6 +345,11 @@ function LoadGarage(wait)
         xnGarage.vehicles = {}
 
         if vehicleTable and vehicleTable[xnGarage.curGarageName] then
+	    for pos=1,#xnGarageConfig.locations[xnGarage.curGarageName].carLocations do
+		local x,y,z,h = ToCoord(xnGarage.curGarage.carLocations[pos], true)	
+		DeleteNearestVehicleOut(x,y,z)
+	    end					
+	Citizen.Wait(1000)	
             for pos=1,#xnGarageConfig.locations[xnGarage.curGarageName].carLocations do -- Something weird with JSON causes something to be stupid with null keys
                 local vehData = vehicleTable[xnGarage.curGarageName][pos]
                 if vehData and vehData ~= "none" then
@@ -355,22 +360,20 @@ function LoadGarage(wait)
                         if xnGarage.vehicleTakenLoc == xnGarage.curGarageName and xnGarage.vehicleTaken and pos == xnGarage.vehicleTakenPos and not IsEntityDead(xnGarage.vehicleTaken) then
                         else
 							-- Load
-							if DeleteNearestVehicleOut(x,y,z) then
-								RequestModel(model)
-								while not HasModelLoaded(model) do Citizen.Wait(0) end
+							RequestModel(model)
+							while not HasModelLoaded(model) do Citizen.Wait(0) end
 
-								-- Create
-								xnGarage.vehicles[pos] = CreateVehicleFromData(vehData, x,y,z+1.0,h,true)
+							-- Create
+							xnGarage.vehicles[pos] = CreateVehicleFromData(vehData, x,y,z+1.0,h,true)
 
-								-- Godmode
-								SetEntityInvincible(xnGarage.vehicles[pos], true)
-								SetEntityProofs(xnGarage.vehicles[pos], true, true, true, true, true, true, 1, true)
-								SetVehicleTyresCanBurst(xnGarage.vehicles[pos], false)
-								SetVehicleCanBreak(xnGarage.vehicles[pos], false)
-								SetVehicleCanBeVisiblyDamaged(xnGarage.vehicles[pos], false)
-								SetEntityCanBeDamaged(xnGarage.vehicles[pos], false)
-								SetVehicleExplodesOnHighExplosionDamage(xnGarage.vehicles[pos], false)
-							end
+							-- Godmode
+							SetEntityInvincible(xnGarage.vehicles[pos], true)
+							SetEntityProofs(xnGarage.vehicles[pos], true, true, true, true, true, true, 1, true)
+							SetVehicleTyresCanBurst(xnGarage.vehicles[pos], false)
+							SetVehicleCanBreak(xnGarage.vehicles[pos], false)
+							SetVehicleCanBeVisiblyDamaged(xnGarage.vehicles[pos], false)
+							SetEntityCanBeDamaged(xnGarage.vehicles[pos], false)
+							SetVehicleExplodesOnHighExplosionDamage(xnGarage.vehicles[pos], false)
                         end
                         Citizen.CreateThread(function()
                             while true do
